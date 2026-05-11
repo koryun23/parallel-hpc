@@ -8,11 +8,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-uint32_t *blur_image(const char *filename, int *width, int *height, int *channels) {
-    
-    uint32_t *pixels = read_image(filename, width, height, channels);
-    // perform gaussian blurring
+uint32_t blur_pixel(uint32_t *pixels, int index, int width, int height) {
+    int kernel[9] = {1, 2, 1, 2, 4, 2, 1, 2, 1};
+    int coeff = 1/16;
+    int offsets[9] = {
+        -width - 1, -width, -width + 1,
+        -1,          0,      1,
+         width - 1,  width,  width + 1
+    };
 
+    int sum_r = 0;
+    int sum_g = 0;
+    int sum_b = 0;
+    int sum_a = 0;
+
+    int weight;
+    for (int i = 0; i < 9; i++) {
+        if (index + offsets[i] < 0 || index + offsets[i] >= width * height) {
+            continue;
+        }
+        uint32_t pixel = pixels[index + offsets[i]];
+        int weight = kernel[i];
+        uint8_t a = (pixel >> 24) & 0xff;
+        uint8_t r = (pixel >> 16) & 0xff;
+        uint8_t g = (pixel >> 8)  & 0xff;
+        uint8_t b = pixel & 0xff;
+        sum_r += r * weight;
+        sum_g += g * weight;
+        sum_b += b * weight;
+        sum_a += a * weight;
+    }
+
+    sum_r *= coeff;
+    sum_g *= coeff;
+    sum_b *= coeff;
+    sum_a *= coeff;
+
+    return ((uint32_t)sum_a << 24) |
+           ((uint32_t)sum_r << 16) |
+           ((uint32_t)sum_g << 8)  |
+           sum_b;
 }
 
 uint32_t *read_image(
@@ -87,6 +122,19 @@ int save_png(
     return ok;
 }
 
+uint32_t *blur_image(uint32_t *pixels, int width, int height) {
+    uint32_t *blurred = malloc(width * height * sizeof(uint32_t));
+
+    if (!blurred) {
+        return NULL;
+    }
+
+    for (int i = 0; i < width * height; i++) {
+        blurred[i] = blur_pixel(pixels, i, width, height);   
+    }
+
+    return blurred;
+}
 
 int main(void) {
     int width, height, channels;
@@ -102,19 +150,25 @@ int main(void) {
         return 1;
     }
 
-    printf("Width: %d\n", width);
-    printf("Height: %d\n", height);
-    printf("Original channels: %d\n", channels);
-    printf("Number of pixels: %d\n", width * height);
+    uint32_t *blurred = blur_image(pixels, width, height);
 
-    if (!save_png("output/image.png", pixels, width, height)) {
-        printf("Failed to save image\n");
+    if (!blurred) {
+        printf("Failed to blur image\n");
         free(pixels);
         return 1;
     }
 
-    printf("Image saved successfully\n");
+    if (!save_png("output/blurred.jpg", blurred, width, height)) {
+        printf("Failed to save image\n");
+        free(pixels);
+        free(blurred);
+        return 1;
+    }
+
+    printf("Blurred image saved successfully\n");
 
     free(pixels);
+    free(blurred);
+
     return 0;
 }
