@@ -97,6 +97,7 @@ int save_png(
     int width,
     int height
 ) {
+    
     unsigned char *rgba = malloc(width * height * 4);
 
     if (!rgba) {
